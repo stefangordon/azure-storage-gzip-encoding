@@ -6,14 +6,14 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Microsoft.WindowsAzure.Storage.Shared.Protocol;
 
 namespace ASGE
 {
     class Utility
     {
-
-
         public static void EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, int cacheControlMaxAgeSeconds, bool simulate)
         {
             Trace.TraceInformation("Enumerating files.");
@@ -102,6 +102,27 @@ namespace ASGE
                 }
 
             });
+        }
+
+
+        //acc.SetCORSPropertiesOnBlobService(cors => {
+        //    var wildcardRule = new CorsRule() { AllowedMethods = CorsHttpMethods.Get, AllowedOrigins = { "*" } };
+        //cors.CorsRules.Add(wildcardRule);
+        //    return cors;
+        //});
+
+        public static void SetCORSPropertiesOnBlobService(this CloudStorageAccount storageAccount,
+            Func<CorsProperties, CorsProperties> alterCorsRules)
+        {
+            if (storageAccount == null || alterCorsRules == null) throw new ArgumentNullException();
+
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+
+            ServiceProperties serviceProperties = blobClient.GetServiceProperties();
+
+            serviceProperties.Cors = alterCorsRules(serviceProperties.Cors) ?? new CorsProperties();
+
+            blobClient.SetServiceProperties(serviceProperties);
         }
     }
 }
