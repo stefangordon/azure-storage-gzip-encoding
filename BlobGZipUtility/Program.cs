@@ -9,7 +9,7 @@ using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Auth;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace BlobGZipUtility
+namespace ASGE
 {
     class Program
     {
@@ -18,6 +18,12 @@ namespace BlobGZipUtility
             var options = new Options();
             if (CommandLine.Parser.Default.ParseArguments(args, options))
             {
+                if (string.IsNullOrEmpty(options.NewExtension) && !options.Replace)
+                {
+                    Console.WriteLine("Must provide either -r (in-place replacement) or -n (new extension/postfix to append to compressed version).");
+                    return;
+                }
+
                 CloudStorageAccount storageAccount;
 
                 if (!string.IsNullOrEmpty(options.ConnectionString))
@@ -37,7 +43,7 @@ namespace BlobGZipUtility
                 CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
                 CloudBlobContainer blobContainer = blobClient.GetContainerReference(options.Container);
 
-                Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, (int)TimeSpan.FromDays(30).TotalSeconds);
+                Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, options.MaxAgeSeconds, options.Simulate);
 
             }
             else
@@ -45,9 +51,6 @@ namespace BlobGZipUtility
                 // Display the default usage information
                 //Console.WriteLine(options.GetUsage());
             }
-
-            Console.WriteLine("Press any key to exit.");
-            Console.ReadKey();
         }
     }
 }

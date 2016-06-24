@@ -8,31 +8,30 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace BlobGZipUtility
+namespace ASGE
 {
     class Utility
     {
 
 
-        public static void EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, int cacheControlMaxAgeSeconds)
+        public static void EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, int cacheControlMaxAgeSeconds, bool simulate)
         {
             Trace.TraceInformation("Enumerating files.");
 
             string cacheControlHeader = "public, max-age=" + cacheControlMaxAgeSeconds.ToString();
 
-            var blobInfos = container.ListBlobs(null, true);
-            //Parallel.ForEach(blobInfos, (blobInfo) =>
-            foreach(var blobInfo in blobInfos)
+            var blobInfos = container.ListBlobs(null, true, BlobListingDetails.Metadata);
+
+            Parallel.ForEach(blobInfos, (blobInfo) =>            
             {
-                CloudBlob gzipBlob = null;
-                string blobUrl = blobInfo.Uri.ToString();
+                CloudBlob gzipBlob = null;                
                 CloudBlob blob = (CloudBlob)blobInfo;
 
                 // Only work with desired extensions
                 string extension = Path.GetExtension(blobInfo.Uri.LocalPath);
                 if (!extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
                 {
-                    continue;
+                    return;
                 }
 
                 // Check if it is already done
@@ -41,58 +40,68 @@ namespace BlobGZipUtility
                     if (string.Equals(blob.Properties.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
                     {
                         Trace.TraceInformation("Skipping already compressed blob: " + blob.Name);
-                        continue;
+                        return;
                     }
                 }
                 else
                 {
-                    string gzipUrl = blobUrl + newExtension;
-                    gzipBlob = container.GetBlobReference(gzipUrl);
-
+                    string gzipUrl = blob.Name + newExtension;
+                    gzipBlob = container.GetBlockBlobReference(gzipUrl);
+                         
                     if (gzipBlob.Exists())
                     {
                         Trace.TraceInformation("Skipping already compressed blob: " + blob.Name);
-                        continue;
+                        return;
                     }
                 }
 
-                // create a gzip version of the file
+                // Compress blob contents
+                Trace.TraceInformation("Downloading blob: " + blob.Name);
+
+                byte[] compressedBytes;
+
                 using (MemoryStream memoryStream = new MemoryStream())
                 {
-                    // push the original blob into the gzip stream
                     using (var gzipStream = new GZipStream(memoryStream, CompressionMode.Compress))
                     using (var blobStream = blob.OpenRead())
                     {
                         blobStream.CopyTo(gzipStream);
                     }
+                    
+                    compressedBytes = memoryStream.ToArray();
+                }
 
-                    // the gzipStream MUST be closed before its safe to read from the memory stream
-                    byte[] compressedBytes = memoryStream.ToArray();
+                // Blob to write to 
+                CloudBlockBlob destinationBlob;
 
-                    // Blob to write to 
-                    CloudBlockBlob destinationBlob;
+                if (inPlace)
+                {                        
+                    destinationBlob = (CloudBlockBlob)blob;
+                }
+                else
+                {
+                    destinationBlob = (CloudBlockBlob)gzipBlob;                        
+                }
 
-                    if (inPlace)
-                    {                        
-                        destinationBlob = (CloudBlockBlob)blob;
-                    }
-                    else
-                    {
-                        destinationBlob = (CloudBlockBlob)gzipBlob;                        
-                    }
-
+                if (simulate)
+                {
+                    Trace.TraceInformation("NOT writing blob, due to simulation: " + blob.Name);
+                }
+                else
+                { 
+                    // Upload the compressed bytes to the new blob
                     Trace.TraceInformation("Writing blob: " + blob.Name);
-
-                    // upload the compressed bytes to the new blob
                     destinationBlob.UploadFromByteArray(compressedBytes, 0, compressedBytes.Length);
-
-                    // set the blob headers
+                              
+                    // Set the blob headers
+                    Trace.TraceInformation("Configuring headers");
                     destinationBlob.Properties.CacheControl = cacheControlHeader;
                     destinationBlob.Properties.ContentType = blob.Properties.ContentType;
                     destinationBlob.Properties.ContentEncoding = "gzip";
                     destinationBlob.SetProperties();
                 }
-            }//);
+
+            });
         }
     }
 }
