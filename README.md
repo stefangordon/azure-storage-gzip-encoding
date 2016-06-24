@@ -1,7 +1,9 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/5b7d5wk4pwv21htt?svg=true)](https://ci.appveyor.com/project/stefangordon/azure-storage-gzip-encoding)
 
 # Azure Storage GZip Encoding
-A utility to automatically configure [HTTP Compression](https://en.wikipedia.org/wiki/HTTP_compression) for blobs in Azure Blob storage.  Blobs can be consumed directly from a client browser or via Azure CDN.
+A utility to automatically configure [HTTP Compression](https://en.wikipedia.org/wiki/HTTP_compression) for blobs in Azure Blob storage.  Blobs can be consumed directly from a client browser or via Azure CDN.  
+
+This tool is inspired by a code sample from David Rousset for optimizing BablyonJS Assets.
 
 ## Why
 Azure storage is an excellent option for storing assets and data consumed by web applications, but it is often preferable to have this data delivered to the browser compressed.  Azure CDN can be used to provide compression and performance improvements on top of blob storage but has an upper limit of 1MB for HTTP compression.
