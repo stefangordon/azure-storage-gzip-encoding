@@ -19,14 +19,14 @@ namespace ASGE
         public string StorageKey { get; set; }
 
         [Option('c', "connectionstring", Required = false, MutuallyExclusiveSet = "ConnectionString",
-            HelpText = "Storage account key.")]
+            HelpText = "Storage account connection string.")]
         public string ConnectionString { get; set; }
 
         [OptionArray('e', "extensions", Required = true,
             HelpText = "Extensions to operate on. [.js, .css, .dat]")]
         public string[] Extensions { get; set; }
 
-        [Option('r', "replace", Required = false, DefaultValue = false, 
+        [Option('r', "replace", Required = false, DefaultValue = false,
             HelpText = "Replace existing files in-place.")]
         public bool Replace { get; set; }
 
@@ -34,7 +34,7 @@ namespace ASGE
             HelpText = "Do everything except write to blob store.")]
         public bool Simulate { get; set; }
 
-        [Option('n', "newextension", Required = false, 
+        [Option('n', "newextension", Required = false,
             HelpText = "Copy file with a new postfix. [.gz]")]
         public string NewExtension { get; set; }
 
@@ -46,6 +46,10 @@ namespace ASGE
             HelpText = "Duration for cache control max age header, in seconds.  Default 2592000 (30 days).")]
         public int MaxAgeSeconds { get; set; }
 
+        [Option('w', "wildcardcors", Required = false, DefaultValue = false,
+            HelpText = "Enable wildcard CORS for this storage account.")]
+        public bool wildcard { get; set; }
+
 
         [HelpOption]
         public string GetUsage()
@@ -53,7 +57,7 @@ namespace ASGE
             var help = new HelpText
             {
                 Heading = new HeadingInfo("Azure Storage GZip Encoder", "1.0"),
-                Copyright = new CopyrightInfo("Stefan Gordon", 2016),                
+                Copyright = new CopyrightInfo("Stefan Gordon", 2016),
                 AdditionalNewLineAfterOption = true,
                 AddDashesToOption = true
             };

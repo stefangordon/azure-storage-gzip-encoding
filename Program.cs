@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -43,13 +44,16 @@ namespace ASGE
                 CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
                 CloudBlobContainer blobContainer = blobClient.GetContainerReference(options.Container);
 
+                // Do the compression work
                 Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, options.MaxAgeSeconds, options.Simulate);
 
-            }
-            else
-            {
-                // Display the default usage information
-                //Console.WriteLine(options.GetUsage());
+                // Enable CORS if appropriate
+                if (options.wildcard)
+                {
+                    Utility.SetWildcardCorsOnBlobService(storageAccount);
+                }
+
+                Trace.TraceInformation("Complete.");                
             }
         }
     }
