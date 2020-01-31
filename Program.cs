@@ -18,25 +18,6 @@ namespace ASGE
                 .WriteTo.Console()
                 .CreateLogger();
 
-            //args = new[]
-            //{
-            //    "-e",
-            //    ".css",
-            //    ".js",
-            //    ".html",
-            //    ".htm",
-            //    ".xml",
-            //    "-f",
-            //    "$web",
-            //    "-n",
-            //    ".gz",
-            //    "-r",
-            //    "-a",
-            //    "dprstaging",
-            //    "-k",
-            //    "VdwvaXzm/+W9jhHM/6gqAfd/+5Qdx4OzD3m5MefO7+vQGTOOrC4CK9FA08fgE4emG/EHh+0562yi+NoDqsI7pA==",
-            //};
-
             var result = await CommandLine.Parser.Default.ParseArguments<Options>(args)
                 .MapResult(
                     async opts => await RunOptionsAndReturnExitCode(opts),
