@@ -42,7 +42,7 @@ namespace ASGE
             HelpText = "Container to search in.")]
         public string Container { get; set; }
 
-        [Option('x', "cacheage", Required = false,  Default = 84600,
+        [Option('x', "cacheage", Required = false,  Default = 2 * 84600,
             HelpText = "Duration for cache control max age header, in seconds.  Default 2592000 (30 days).")]
         public int MaxAgeSeconds { get; set; }
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -34,10 +35,9 @@ namespace ASGE
                 );
 
                 blobContinuationToken = resultSegment.ContinuationToken;
-                Parallel.ForEach(
-                    resultSegment.Results,
-                    new ParallelOptions { MaxDegreeOfParallelism = 1 },
-                    async (blobInfo) => await EnsureGzipOneFile(container, extensions, inPlace, newExtension, simulate, blobInfo, cacheControlHeader));
+                await resultSegment.Results.ForEachAsync(
+                    async (blobInfo) => 
+                        await EnsureGzipOneFile(container, extensions, inPlace, newExtension, simulate, blobInfo, cacheControlHeader));
 
             } while (blobContinuationToken != null); // Loop while the continuation token is not null.
         }
