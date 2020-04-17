@@ -52,7 +52,7 @@ namespace ASGE
             CloudBlobContainer blobContainer = blobClient.GetContainerReference(options.Container);
 
             // Do the compression work
-            await Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, options.MaxAgeSeconds, options.Simulate);
+            await Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, options.CacheControlHeader, options.Simulate);
 
             // Enable CORS if appropriate
             if (options.wildcard)

@@ -42,9 +42,9 @@ namespace ASGE
             HelpText = "Container to search in.")]
         public string Container { get; set; }
 
-        [Option('x', "cacheage", Required = false,  Default = 2 * 84600,
-            HelpText = "Duration for cache control max age header, in seconds.  Default 2592000 (30 days).")]
-        public int MaxAgeSeconds { get; set; }
+        [Option('x', "cachecontrol", Required = false,  Default = "public, max-age=2592000",
+            HelpText = "Cache-Control header to be sent for the resource from the server.")]
+        public string CacheControlHeader { get; set; }
 
         [Option('w', "wildcardcors", Required = false, Default = false,
             HelpText = "Enable wildcard CORS for this storage account.")]

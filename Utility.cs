@@ -15,11 +15,9 @@ namespace ASGE
 {
     static class Utility
     {
-        public static async Task EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, int cacheControlMaxAgeSeconds, bool simulate)
+        public static async Task EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, string cacheControlHeader, bool simulate)
         {
             Log.Information("Enumerating files.");
-
-            string cacheControlHeader = "public, max-age=" + cacheControlMaxAgeSeconds.ToString();
 
             BlobContinuationToken blobContinuationToken = null;
             do
