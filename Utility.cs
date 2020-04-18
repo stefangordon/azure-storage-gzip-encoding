@@ -113,10 +113,7 @@ namespace ASGE
 
                 // Set the blob headers
                 Log.Information("Configuring headers");
-                if (cacheControlHeader != null)
-                {
-                    destinationBlob.Properties.CacheControl = cacheControlHeader;
-                }
+                destinationBlob.Properties.CacheControl = cacheControlHeader;
                 destinationBlob.Properties.ContentType = blob.Properties.ContentType;
                 destinationBlob.Properties.ContentEncoding = "gzip";
                 await destinationBlob.SetPropertiesAsync();
