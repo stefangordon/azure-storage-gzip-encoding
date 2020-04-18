@@ -42,7 +42,7 @@ namespace ASGE
             HelpText = "Container to search in.")]
         public string Container { get; set; }
 
-        [Option('x', "cachecontrol", Required = false,  Default = "public, max-age=2592000",
+        [Option('h', "cachecontrol", Required = false,  Default = null,
             HelpText = "Cache-Control header to be sent for the resource from the server.")]
         public string CacheControlHeader { get; set; }
 
