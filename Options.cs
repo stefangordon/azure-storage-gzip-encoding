@@ -22,9 +22,9 @@ namespace ASGE
             HelpText = "Storage account connection string.")]
         public string ConnectionString { get; set; }
 
-        [Option('e', "extensions", Required = true,
-            HelpText = "Extensions to operate on. [.js, .css, .dat]")]
-        public IEnumerable<string> Extensions { get; set; }
+        [Option('i', "include", Required = true,
+            HelpText = "Regular expressions to match files to operate on. [*\\.js, \\.css, \\.dat]")]
+        public IEnumerable<string> Include { get; set; }
 
         [Option('r', "replace", Required = false, Default = false,
             HelpText = "Replace existing files in-place.")]

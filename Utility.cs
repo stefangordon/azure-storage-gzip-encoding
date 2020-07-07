@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
@@ -15,7 +16,7 @@ namespace ASGE
 {
     static class Utility
     {
-        public static async Task EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, string cacheControlHeader, bool simulate)
+        public static async Task EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> include, bool inPlace, string newExtension, string cacheControlHeader, bool simulate)
         {
             Log.Information("Enumerating files.");
 
@@ -35,19 +36,19 @@ namespace ASGE
                 blobContinuationToken = resultSegment.ContinuationToken;
                 await resultSegment.Results.ForEachAsync(
                     async (blobInfo) => 
-                        await EnsureGzipOneFile(container, extensions, inPlace, newExtension, simulate, blobInfo, cacheControlHeader));
+                        await EnsureGzipOneFile(container, include, inPlace, newExtension, simulate, blobInfo, cacheControlHeader));
 
             } while (blobContinuationToken != null); // Loop while the continuation token is not null.
         }
 
-        private static async Task EnsureGzipOneFile(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, bool simulate, IListBlobItem blobInfo, string cacheControlHeader)
+        private static async Task EnsureGzipOneFile(CloudBlobContainer container, IEnumerable<string> include, bool inPlace, string newExtension, bool simulate, IListBlobItem blobInfo, string cacheControlHeader)
         {
             CloudBlob gzipBlob = null;
             CloudBlob blob = (CloudBlob)blobInfo;
 
             // Only work with desired extensions
             string extension = Path.GetExtension(blobInfo.Uri.LocalPath);
-            if (!extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            if (!include.Any(i => Regex.IsMatch(blobInfo.Uri.LocalPath, i)))
             {
                 return;
             }
