@@ -1,59 +1,97 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
+using System;
 using System.Threading.Tasks;
 using CommandLine;
-using Microsoft.Azure;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Auth;
-using Microsoft.WindowsAzure.Storage.Blob;
+using Azure.Storage.Blobs;
+using Microsoft.Extensions.Logging;
 
 namespace ASGE
 {
     class Program
     {
-        static void Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
-            var options = new Options();
-            if (CommandLine.Parser.Default.ParseArguments(args, options))
+            // Set up logging
+            using var loggerFactory = LoggerFactory.Create(builder =>
+                builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+            var logger = loggerFactory.CreateLogger<Program>();
+
+            try
+            {
+                var result = await Parser.Default.ParseArguments<Options>(args)
+                    .MapResult(
+                        async (Options options) => await RunAsync(options, logger),
+                        errors => Task.FromResult(1));
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unhandled exception occurred");
+                return 1;
+            }
+        }
+
+        static async Task<int> RunAsync(Options options, ILogger logger)
+        {
+            try
             {
                 if (string.IsNullOrEmpty(options.NewExtension) && !options.Replace)
                 {
-                    Console.WriteLine("Must provide either -r (in-place replacement) or -n (new extension/postfix to append to compressed version).");
-                    return;
+                    logger.LogError("Must provide either -r (in-place replacement) or -n (new extension/postfix to append to compressed version).");
+                    return 1;
                 }
 
-                CloudStorageAccount storageAccount;
+                BlobServiceClient blobServiceClient;
 
                 if (!string.IsNullOrEmpty(options.ConnectionString))
                 {
-                    storageAccount = CloudStorageAccount.Parse(options.ConnectionString);
+                    blobServiceClient = new BlobServiceClient(options.ConnectionString);
                 }
-                else if (!string.IsNullOrEmpty(options.StorageAccount) && !String.IsNullOrEmpty(options.StorageKey))
+                else if (!string.IsNullOrEmpty(options.StorageAccount) && !string.IsNullOrEmpty(options.StorageKey))
                 {
-                    storageAccount = new CloudStorageAccount(new StorageCredentials(options.StorageAccount, options.StorageKey), true);        
+                    var connectionString = $"DefaultEndpointsProtocol=https;AccountName={options.StorageAccount};AccountKey={options.StorageKey};EndpointSuffix=core.windows.net";
+                    blobServiceClient = new BlobServiceClient(connectionString);
                 }
                 else
                 {
-                    options.GetUsage();
-                    return;
+                    logger.LogError("Must provide either connection string (-c) or account name and key (-a and -k).");
+                    return 1;
                 }
 
-                CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-                CloudBlobContainer blobContainer = blobClient.GetContainerReference(options.Container);
+                var containerClient = blobServiceClient.GetBlobContainerClient(options.Container);
+
+                // Verify container exists
+                try
+                {
+                    var exists = await containerClient.ExistsAsync();
+                    if (!exists.Value)
+                    {
+                        logger.LogError("Container '{Container}' does not exist.", options.Container);
+                        return 1;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error accessing container '{Container}'.", options.Container);
+                    return 1;
+                }
 
                 // Do the compression work
-                Utility.EnsureGzipFiles(blobContainer, options.Extensions, options.Replace, options.NewExtension, options.MaxAgeSeconds, options.Simulate);
+                await Utility.EnsureGzipFilesAsync(containerClient, options.Extensions, options.Replace, options.NewExtension, options.MaxAgeSeconds, options.Simulate, logger);
 
                 // Enable CORS if appropriate
-                if (options.wildcard)
+                if (options.Wildcard)
                 {
-                    Utility.SetWildcardCorsOnBlobService(storageAccount);
+                    await Utility.SetWildcardCorsOnBlobServiceAsync(blobServiceClient, logger);
                 }
 
-                Trace.TraceInformation("Complete.");                
+                logger.LogInformation("Complete.");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error occurred during execution");
+                return 1;
             }
         }
     }

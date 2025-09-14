@@ -1,134 +1,172 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
-using Microsoft.WindowsAzure.Storage.Shared.Protocol;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ASGE
 {
-    static class Utility
+    public static class Utility
     {
-        public static void EnsureGzipFiles(CloudBlobContainer container, IEnumerable<string> extensions, bool inPlace, string newExtension, int cacheControlMaxAgeSeconds, bool simulate)
+        public static async Task EnsureGzipFilesAsync(BlobContainerClient containerClient, IEnumerable<string> extensions, bool inPlace, string? newExtension, int cacheControlMaxAgeSeconds, bool simulate, ILogger logger)
         {
-            Trace.TraceInformation("Enumerating files.");
+            logger.LogInformation("Enumerating files.");
 
-            string cacheControlHeader = "public, max-age=" + cacheControlMaxAgeSeconds.ToString();
+            string cacheControlHeader = $"public, max-age={cacheControlMaxAgeSeconds}";
 
-            var blobInfos = container.ListBlobs(null, true, BlobListingDetails.Metadata);
+            var blobs = containerClient.GetBlobsAsync(BlobTraits.Metadata);
 
-            Parallel.ForEach(blobInfos, (blobInfo) =>            
+            var tasks = new List<Task>();
+            await foreach (var blobItem in blobs)
             {
-                CloudBlob gzipBlob = null;                
-                CloudBlob blob = (CloudBlob)blobInfo;
-
-                // Only work with desired extensions
-                string extension = Path.GetExtension(blobInfo.Uri.LocalPath);
-                if (!extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+                tasks.Add(ProcessBlobAsync(containerClient, blobItem, extensions, inPlace, newExtension, cacheControlHeader, simulate, logger));
+                
+                // Process in batches to avoid overwhelming the service
+                if (tasks.Count >= 10)
                 {
+                    await Task.WhenAll(tasks);
+                    tasks.Clear();
+                }
+            }
+
+            if (tasks.Count > 0)
+            {
+                await Task.WhenAll(tasks);
+            }
+        }
+
+        private static async Task ProcessBlobAsync(BlobContainerClient containerClient, BlobItem blobItem, IEnumerable<string> extensions, bool inPlace, string? newExtension, string cacheControlHeader, bool simulate, ILogger logger)
+        {
+            // Only work with desired extensions
+            string extension = Path.GetExtension(blobItem.Name);
+            if (!extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var blobClient = containerClient.GetBlobClient(blobItem.Name);
+            BlobClient? gzipBlobClient = null;
+
+            // Check if it is already done
+            if (inPlace)
+            {
+                if (string.Equals(blobItem.Properties.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogInformation("Skipping already compressed blob: {BlobName}", blobItem.Name);
                     return;
                 }
+            }
+            else
+            {
+                string gzipBlobName = blobItem.Name + newExtension;
+                gzipBlobClient = containerClient.GetBlobClient(gzipBlobName);
 
-                // Check if it is already done
-                if (inPlace)
+                try
                 {
-                    if (string.Equals(blob.Properties.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
+                    var exists = await gzipBlobClient.ExistsAsync();
+                    if (exists.Value)
                     {
-                        Trace.TraceInformation("Skipping already compressed blob: " + blob.Name);
+                        logger.LogInformation("Skipping already compressed blob: {BlobName}", blobItem.Name);
                         return;
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    string gzipUrl = blob.Name + newExtension;
-                    gzipBlob = container.GetBlockBlobReference(gzipUrl);
-                         
-                    if (gzipBlob.Exists())
-                    {
-                        Trace.TraceInformation("Skipping already compressed blob: " + blob.Name);
-                        return;
-                    }
+                    logger.LogWarning(ex, "Error checking if blob exists: {BlobName}", gzipBlobName);
+                    return;
                 }
+            }
 
+            try
+            {
                 // Compress blob contents
-                Trace.TraceInformation("Downloading blob: " + blob.Name);
+                logger.LogInformation("Downloading blob: {BlobName}", blobItem.Name);
 
                 byte[] compressedBytes;
+                string contentType = blobItem.Properties.ContentType ?? "application/octet-stream";
 
-                using (MemoryStream memoryStream = new MemoryStream())
+                using (var memoryStream = new MemoryStream())
                 {
                     using (var gzipStream = new GZipStream(memoryStream, CompressionMode.Compress))
-                    using (var blobStream = blob.OpenRead())
                     {
-                        blobStream.CopyTo(gzipStream);
+                        var downloadInfo = await blobClient.DownloadStreamingAsync();
+                        await downloadInfo.Value.Content.CopyToAsync(gzipStream);
                     }
-                    
+
                     compressedBytes = memoryStream.ToArray();
                 }
 
                 // Blob to write to 
-                CloudBlockBlob destinationBlob;
-
-                if (inPlace)
-                {                        
-                    destinationBlob = (CloudBlockBlob)blob;
-                }
-                else
-                {
-                    destinationBlob = (CloudBlockBlob)gzipBlob;                        
-                }
+                BlobClient destinationBlobClient = inPlace ? blobClient : gzipBlobClient!;
 
                 if (simulate)
                 {
-                    Trace.TraceInformation("NOT writing blob, due to simulation: " + blob.Name);
+                    logger.LogInformation("NOT writing blob, due to simulation: {BlobName}", blobItem.Name);
                 }
                 else
-                { 
+                {
                     // Upload the compressed bytes to the new blob
-                    Trace.TraceInformation("Writing blob: " + blob.Name);
-                    destinationBlob.UploadFromByteArray(compressedBytes, 0, compressedBytes.Length);
-                              
-                    // Set the blob headers
-                    Trace.TraceInformation("Configuring headers");
-                    destinationBlob.Properties.CacheControl = cacheControlHeader;
-                    destinationBlob.Properties.ContentType = blob.Properties.ContentType;
-                    destinationBlob.Properties.ContentEncoding = "gzip";
-                    destinationBlob.SetProperties();
-                }
+                    logger.LogInformation("Writing blob: {BlobName}", blobItem.Name);
 
-            });
+                    using var uploadStream = new MemoryStream(compressedBytes);
+                    var uploadOptions = new BlobUploadOptions
+                    {
+                        HttpHeaders = new BlobHttpHeaders
+                        {
+                            CacheControl = cacheControlHeader,
+                            ContentType = contentType,
+                            ContentEncoding = "gzip"
+                        }
+                    };
+
+                    await destinationBlobClient.UploadAsync(uploadStream, uploadOptions, cancellationToken: CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing blob: {BlobName}", blobItem.Name);
+            }
         }
 
-        public static void SetWildcardCorsOnBlobService(this CloudStorageAccount storageAccount)
+        public static async Task SetWildcardCorsOnBlobServiceAsync(BlobServiceClient blobServiceClient, ILogger logger)
         {
-            storageAccount.SetCORSPropertiesOnBlobService(cors =>
+            logger.LogInformation("Configuring CORS.");
+
+            try
             {
-                var wildcardRule = new CorsRule() { AllowedMethods = CorsHttpMethods.Get, AllowedOrigins = { "*" } };
-                cors.CorsRules.Clear();
-                cors.CorsRules.Add(wildcardRule);
-                return cors;
-            });
-        }            
+                var serviceProperties = await blobServiceClient.GetPropertiesAsync();
+                
+                var corsRules = new List<BlobCorsRule>
+                {
+                    new BlobCorsRule
+                    {
+                        AllowedMethods = "GET",
+                        AllowedOrigins = "*",
+                        AllowedHeaders = "*",
+                        ExposedHeaders = "*",
+                        MaxAgeInSeconds = 3600
+                    }
+                };
 
-        public static void SetCORSPropertiesOnBlobService(this CloudStorageAccount storageAccount,
-            Func<CorsProperties, CorsProperties> alterCorsRules)
-        {
-            Trace.TraceInformation("Configuring CORS.");
+                serviceProperties.Value.Cors.Clear();
+                foreach (var rule in corsRules)
+                {
+                    serviceProperties.Value.Cors.Add(rule);
+                }
 
-            if (storageAccount == null || alterCorsRules == null) throw new ArgumentNullException();
-
-            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-
-            ServiceProperties serviceProperties = blobClient.GetServiceProperties();
-
-            serviceProperties.Cors = alterCorsRules(serviceProperties.Cors) ?? new CorsProperties();
-
-            blobClient.SetServiceProperties(serviceProperties);
+                await blobServiceClient.SetPropertiesAsync(serviceProperties.Value);
+                logger.LogInformation("CORS configuration completed.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error configuring CORS");
+                throw;
+            }
         }
     }
 }
