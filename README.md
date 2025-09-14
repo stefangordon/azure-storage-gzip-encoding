@@ -1,9 +1,17 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/5b7d5wk4pwv21htt?svg=true)](https://ci.appveyor.com/project/stefangordon/azure-storage-gzip-encoding)
 
 # Azure Storage GZip Encoding
-A utility to automatically configure [HTTP Compression](https://en.wikipedia.org/wiki/HTTP_compression) for blobs in Azure Blob storage.  Blobs can be consumed directly from a client browser or via Azure CDN.
+A cross-platform utility to automatically configure [HTTP Compression](https://en.wikipedia.org/wiki/HTTP_compression) for blobs in Azure Blob storage. Blobs can be consumed directly from a client browser or via Azure CDN.
 
 This tool is inspired by a code sample from David Rousset for optimizing BablyonJS Assets.
+
+## Cross-Platform Support
+This tool is built on .NET 8 and runs natively on:
+- **Linux** (x64) - Perfect for Jenkins pipelines and CI/CD systems
+- **Windows** (x64) 
+- **macOS** (x64)
+
+Pre-compiled binaries are available for all platforms, or you can run it with the .NET 8 runtime.
 
 ## Why
 Azure storage is an excellent option for storing assets and data consumed by web applications, but it is often preferable to have this data delivered to the browser compressed.  Azure CDN can be used to provide compression and performance improvements on top of blob storage but has an upper limit of 1MB for HTTP compression.
@@ -18,6 +26,43 @@ The utility can enumerate all of the files in a container.  It then filters to f
 The utility can also automatically configure your storage account with wildcard CORS settings which are often desirable if serving certain types of assets through Azure CDN.
 
 ## Getting Started
+
+### Prerequisites
+- .NET 8 runtime (if using the cross-platform binaries)
+- OR use the self-contained executables that include the runtime
+
+### Installation Options
+
+#### Option 1: Self-Contained Executables (Recommended)
+Download the appropriate executable for your platform:
+- Linux: `asge` (no extension)
+- Windows: `asge.exe` 
+- macOS: `asge` (no extension)
+
+No additional runtime installation required.
+
+#### Option 2: .NET Runtime Required
+If you have .NET 8 installed:
+```bash
+dotnet run --project ASGE.csproj -- [arguments]
+```
+
+#### Option 3: Build from Source
+```bash
+# Clone the repository
+git clone https://github.com/stefangordon/azure-storage-gzip-encoding
+cd azure-storage-gzip-encoding
+
+# Build for your platform
+dotnet build
+
+# Or publish self-contained for specific platform
+dotnet publish -c Release --self-contained -r linux-x64 -o ./linux
+dotnet publish -c Release --self-contained -r win-x64 -o ./windows  
+dotnet publish -c Release --self-contained -r osx-x64 -o ./macos
+```
+
+### Usage
 You must provide
 - Either an account name and key, or connection string
 - Container to enumerate (recursively)
@@ -26,17 +71,41 @@ You must provide
 
 ## Examples
 
-Replacing .css files in-place.  Blobs will be replaced with compressed version and headers updated:
-`asge.exe -e .css -f myContainer -r -a myStorageAccount -k <key>`
+### Linux/macOS
+Replacing .css files in-place. Blobs will be replaced with compressed version and headers updated:
+```bash
+./asge -e .css -f myContainer -r -a myStorageAccount -k <key>
+```
 
 Copy .css and .js to a compressed version and append a .gz extension:
-`asge.exe -e .css .js -f myContainer -n .gz -a myStorageAccount -k <key>`
+```bash
+./asge -e .css .js -f myContainer -n .gz -a myStorageAccount -k <key>
+```
 
 Replacing .js files in-place and enabling CORS for the account:
-`asge.exe -w -e .js -f myContainer -r -a myStorageAccount -k <key>`
+```bash
+./asge -w -e .js -f myContainer -r -a myStorageAccount -k <key>
+```
 
-Replacing .js files in-place using a connection string instead of host/key:
-`asge.exe -e .js -f myContainer -r -c <connection string>`
+### Windows
+Replacing .js files in-place using a connection string:
+```cmd
+asge.exe -e .js -f myContainer -r -c "<connection string>"
+```
+
+### Jenkins Pipeline Example
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('Compress Assets') {
+            steps {
+                sh './asge -e .css .js -f assets -r -c "${AZURE_STORAGE_CONNECTION_STRING}"'
+            }
+        }
+    }
+}
+```
 
 ```
   -a, --account             Storage account host. [mystorage]
